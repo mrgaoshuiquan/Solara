@@ -1,4 +1,3 @@
-```ts
 const API_BASE_URL = "https://musicapi.taxicloud.dpdns.org";
 
 const KUWO_HOST_PATTERN = /(^|\.)kuwo\.cn$/i;
@@ -247,4 +246,3 @@ export async function onRequest({
     request
   );
 }
-```
