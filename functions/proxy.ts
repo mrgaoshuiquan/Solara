@@ -134,14 +134,15 @@ async function proxyApiRequest(
 
   let apiUrl = "";
 
-  // 搜索
+  // 搜索歌曲
   if (types === "search") {
 
     const keywords =
-      url.searchParams.get("name") || "";
+      url.searchParams.get("name") ||
+      url.searchParams.get("word") ||
+      "";
 
-    apiUrl =
-      `${API_BASE_URL}/search?keywords=${encodeURIComponent(keywords)}`;
+    apiUrl = `${API_BASE_URL}/search?keywords=${encodeURIComponent(keywords)}`;
   }
 
   // 获取歌曲播放地址
@@ -149,8 +150,30 @@ async function proxyApiRequest(
 
     const id = url.searchParams.get("id");
 
-    apiUrl =
-      `${API_BASE_URL}/song/url?id=${id}`;
+    const musicApi = `${API_BASE_URL}/song/url?id=${id}`;
+
+    const musicRes = await fetch(musicApi, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+      },
+    });
+
+    const musicJson: any = await musicRes.json();
+
+    const realUrl =
+      musicJson?.data?.[0]?.url || "";
+
+    return Response.json(
+      {
+        url: realUrl,
+      },
+      {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
   }
 
   // 获取歌词
@@ -158,8 +181,7 @@ async function proxyApiRequest(
 
     const id = url.searchParams.get("id");
 
-    apiUrl =
-      `${API_BASE_URL}/lyric?id=${id}`;
+    apiUrl = `${API_BASE_URL}/lyric?id=${id}`;
   }
 
   // 获取歌曲详情
@@ -167,14 +189,16 @@ async function proxyApiRequest(
 
     const id = url.searchParams.get("id");
 
-    apiUrl =
-      `${API_BASE_URL}/song/detail?ids=${id}`;
+    apiUrl = `${API_BASE_URL}/song/detail?ids=${id}`;
   }
 
   else {
-    return new Response("Unsupported types", {
-      status: 400,
-    });
+    return new Response(
+      "Unsupported types",
+      {
+        status: 400,
+      }
+    );
   }
 
   const upstream = await fetch(apiUrl, {
