@@ -1,9 +1,22 @@
+```ts
 const API_BASE_URL = "https://musicapi.taxicloud.dpdns.org";
+
 const KUWO_HOST_PATTERN = /(^|\.)kuwo\.cn$/i;
-const SAFE_RESPONSE_HEADERS = ["content-type", "cache-control", "accept-ranges", "content-length", "content-range", "etag", "last-modified", "expires"];
+
+const SAFE_RESPONSE_HEADERS = [
+  "content-type",
+  "cache-control",
+  "accept-ranges",
+  "content-length",
+  "content-range",
+  "etag",
+  "last-modified",
+  "expires",
+];
 
 function createCorsHeaders(init?: Headers): Headers {
   const headers = new Headers();
+
   if (init) {
     for (const [key, value] of init.entries()) {
       if (SAFE_RESPONSE_HEADERS.includes(key.toLowerCase())) {
@@ -11,10 +24,13 @@ function createCorsHeaders(init?: Headers): Headers {
       }
     }
   }
+
   if (!headers.has("Cache-Control")) {
     headers.set("Cache-Control", "no-store");
   }
+
   headers.set("Access-Control-Allow-Origin", "*");
+
   return headers;
 }
 
@@ -38,42 +54,69 @@ function isAllowedKuwoHost(hostname: string): boolean {
 function normalizeKuwoUrl(rawUrl: string): URL | null {
   try {
     const parsed = new URL(rawUrl);
+
     if (!isAllowedKuwoHost(parsed.hostname)) {
       return null;
     }
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+
+    if (
+      parsed.protocol !== "http:" &&
+      parsed.protocol !== "https:"
+    ) {
       return null;
     }
+
     parsed.protocol = "http:";
+
     return parsed;
   } catch {
     return null;
   }
 }
 
-async function proxyKuwoAudio(targetUrl: string, request: Request): Promise<Response> {
+async function proxyKuwoAudio(
+  targetUrl: string,
+  request: Request
+): Promise<Response> {
+
   const normalized = normalizeKuwoUrl(targetUrl);
+
   if (!normalized) {
-    return new Response("Invalid target", { status: 400 });
+    return new Response("Invalid target", {
+      status: 400,
+    });
   }
 
   const init: RequestInit = {
     method: request.method,
     headers: {
-      "User-Agent": request.headers.get("User-Agent") ?? "Mozilla/5.0",
+      "User-Agent":
+        request.headers.get("User-Agent") ??
+        "Mozilla/5.0",
+
       "Referer": "https://www.kuwo.cn/",
     },
   };
 
   const rangeHeader = request.headers.get("Range");
+
   if (rangeHeader) {
-    (init.headers as Record<string, string>)["Range"] = rangeHeader;
+    (init.headers as Record<string, string>)["Range"] =
+      rangeHeader;
   }
 
-  const upstream = await fetch(normalized.toString(), init);
+  const upstream = await fetch(
+    normalized.toString(),
+    init
+  );
+
   const headers = createCorsHeaders(upstream.headers);
+
   if (!headers.has("Cache-Control")) {
-    headers.set("Cache-Control", "public, max-age=3600");
+    headers.set(
+      "Cache-Control",
+      "public, max-age=3600"
+    );
   }
 
   return new Response(upstream.body, {
@@ -83,29 +126,77 @@ async function proxyKuwoAudio(targetUrl: string, request: Request): Promise<Resp
   });
 }
 
-async function proxyApiRequest(url: URL, request: Request): Promise<Response> {
-  const apiUrl = new URL(API_BASE_URL);
-  url.searchParams.forEach((value, key) => {
-    if (key === "target" || key === "callback") {
-      return;
-    }
-    apiUrl.searchParams.set(key, value);
-  });
+async function proxyApiRequest(
+  url: URL,
+  request: Request
+): Promise<Response> {
 
-  if (!apiUrl.searchParams.has("types")) {
-    return new Response("Missing types", { status: 400 });
+  const types = url.searchParams.get("types");
+
+  let apiUrl = "";
+
+  // 搜索
+  if (types === "search") {
+
+    const keywords =
+      url.searchParams.get("name") || "";
+
+    apiUrl =
+      `${API_BASE_URL}/search?keywords=${encodeURIComponent(keywords)}`;
   }
 
-  const upstream = await fetch(apiUrl.toString(), {
+  // 获取歌曲播放地址
+  else if (types === "url") {
+
+    const id = url.searchParams.get("id");
+
+    apiUrl =
+      `${API_BASE_URL}/song/url?id=${id}`;
+  }
+
+  // 获取歌词
+  else if (types === "lrc") {
+
+    const id = url.searchParams.get("id");
+
+    apiUrl =
+      `${API_BASE_URL}/lyric?id=${id}`;
+  }
+
+  // 获取歌曲详情
+  else if (types === "song") {
+
+    const id = url.searchParams.get("id");
+
+    apiUrl =
+      `${API_BASE_URL}/song/detail?ids=${id}`;
+  }
+
+  else {
+    return new Response("Unsupported types", {
+      status: 400,
+    });
+  }
+
+  const upstream = await fetch(apiUrl, {
     headers: {
-      "User-Agent": request.headers.get("User-Agent") ?? "Mozilla/5.0",
+      "User-Agent":
+        request.headers.get("User-Agent") ??
+        "Mozilla/5.0",
+
       "Accept": "application/json",
     },
   });
 
-  const headers = createCorsHeaders(upstream.headers);
+  const headers = createCorsHeaders(
+    upstream.headers
+  );
+
   if (!headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json; charset=utf-8");
+    headers.set(
+      "Content-Type",
+      "application/json; charset=utf-8"
+    );
   }
 
   return new Response(upstream.body, {
@@ -115,21 +206,45 @@ async function proxyApiRequest(url: URL, request: Request): Promise<Response> {
   });
 }
 
-export async function onRequest({ request }: { request: Request }): Promise<Response> {
+export async function onRequest({
+  request,
+}: {
+  request: Request;
+}): Promise<Response> {
+
   if (request.method === "OPTIONS") {
     return handleOptions();
   }
 
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    return new Response("Method not allowed", { status: 405 });
+  if (
+    request.method !== "GET" &&
+    request.method !== "HEAD"
+  ) {
+    return new Response(
+      "Method not allowed",
+      {
+        status: 405,
+      }
+    );
   }
 
   const url = new URL(request.url);
-  const target = url.searchParams.get("target");
 
+  const target =
+    url.searchParams.get("target");
+
+  // 酷我音频代理
   if (target) {
-    return proxyKuwoAudio(target, request);
+    return proxyKuwoAudio(
+      target,
+      request
+    );
   }
 
-  return proxyApiRequest(url, request);
+  // API代理
+  return proxyApiRequest(
+    url,
+    request
+  );
 }
+```
